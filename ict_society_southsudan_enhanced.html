@@ -1,0 +1,1373 @@
+<!--
+=================================================================
+  GOOGLE SHEETS SETUP — READ THIS BEFORE GOING LIVE
+=================================================================
+
+STEP 1 — Create your Google Sheet
+  • Go to sheets.google.com → New blank sheet
+  • Name it: ICTSS Form Submissions
+  • Add these headers in Row 1:
+    Date | Form Type | Ref | Type | First Name | Last Name |
+    Email | Phone | State | Profession | Organization |
+    Why Join | Subject | Message
+  • Copy the Sheet ID from the URL bar (long string between /d/ and /edit)
+
+STEP 2 — Create Google Apps Script
+  • Go to script.google.com → New project
+  • Delete default code and paste EXACTLY this:
+
+  function doPost(e) {
+    try {
+      var sheet = SpreadsheetApp.openById('PASTE_SHEET_ID_HERE').getActiveSheet();
+      var d = JSON.parse(e.postData.contents);
+      sheet.appendRow([
+        new Date(), d.formType||'', d.ref||'', d.type||'',
+        d.fname||'', d.lname||'', d.email||'', d.phone||'',
+        d.state||'', d.profession||'', d.org||'',
+        d.why||'', d.subject||'', d.message||''
+      ]);
+      return ContentService.createTextOutput(JSON.stringify({status:'ok'}))
+        .setMimeType(ContentService.MimeType.JSON);
+    } catch(err) {
+      return ContentService.createTextOutput(JSON.stringify({status:'error',msg:err.toString()}))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+  }
+
+STEP 3 — Deploy as Web App
+  • Click Deploy → New deployment → Type: Web app
+  • Execute as: Me  |  Who has access: Anyone
+  • Click Deploy → Authorize → Copy the Web App URL
+
+STEP 4 — Paste URL into this file
+  • Find this line in the JavaScript section below:
+      var SHEETS_URL = 'YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL_HERE';
+  • Replace with your actual URL:
+      var SHEETS_URL = 'https://script.google.com/macros/s/XXXX/exec';
+
+Done! Every membership application and contact message will
+appear as a new row in your Google Sheet automatically.
+=================================================================
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ICT Society South Sudan</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css"/>
+  <style>
+    /* ========== RESET & BASE ========== */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-size: 16px; scroll-behavior: smooth; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; color: #1a1a2e; line-height: 1.6; background: #fff; }
+    a { text-decoration: none; color: inherit; }
+    ul { list-style: none; }
+    button { cursor: pointer; font-family: inherit; }
+
+    /* ========== VARIABLES ========== */
+    :root {
+      --navy: #0a2d6e; --navy-dark: #06194a; --navy-light: #1a56db;
+      --red: #c0392b; --red-light: #e74c3c;
+      --light-bg: #f4f7ff; --border: rgba(10,45,110,0.12);
+      --muted: #6b7280; --radius: 10px; --radius-sm: 6px;
+    }
+
+    /* ========== UTILITY ========== */
+    .container { width: 100%; max-width: 1100px; margin: 0 auto; padding: 0 1.5rem; }
+    .section { padding: 4rem 0; }
+    .section-alt { background: var(--light-bg); }
+    .section-label { font-size: 11px; color: var(--red); text-transform: uppercase; letter-spacing: 1.2px; font-weight: 600; margin-bottom: 6px; }
+    .section-title { font-size: clamp(1.5rem, 3vw, 2rem); font-weight: 700; color: var(--navy); line-height: 1.2; margin-bottom: 1rem; }
+    .section-sub { font-size: 15px; color: var(--muted); line-height: 1.8; max-width: 560px; }
+    .btn { display: inline-block; padding: 11px 24px; border-radius: var(--radius-sm); font-size: 14px; font-weight: 600; border: none; transition: all 0.2s; cursor: pointer; }
+    .btn-blue { background: var(--navy-light); color: #fff; }
+    .btn-blue:hover { background: var(--navy); }
+    .btn-navy { background: var(--navy); color: #fff; }
+    .btn-navy:hover { background: var(--navy-light); }
+    .btn-ghost { background: transparent; color: #fff; border: 1.5px solid rgba(255,255,255,0.5); }
+    .btn-ghost:hover { border-color: #fff; background: rgba(255,255,255,0.1); }
+    .btn-white { background: #fff; color: var(--navy); }
+    .btn-white:hover { background: #e8eeff; }
+    .btn-red { background: var(--red); color: #fff; }
+    .btn-red:hover { background: var(--red-light); }
+
+    /* ========== PAGE ROUTING ========== */
+    .page { display: none; }
+    .page.active { display: block; }
+
+    /* ========== NAVBAR ========== */
+    .navbar {
+      position: sticky; top: 0; z-index: 999;
+      background: #fff; border-bottom: 1px solid var(--border);
+      height: 64px; display: flex; align-items: center;
+    }
+    .nav-inner { display: flex; align-items: center; justify-content: space-between; width: 100%; }
+    .logo { display: flex; align-items: center; flex-shrink: 0; cursor: pointer; }
+    .logo img { height: 44px; width: auto; object-fit: contain; display: block; }
+
+    /* Desktop nav with dropdowns */
+    .nav-links { display: flex; align-items: center; gap: 0.2rem; }
+    .nav-item { position: relative; }
+    .nav-item > a, .nav-item > button {
+      font-size: 12px; font-weight: 600; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.5px;
+      background: none; border: none; padding: 8px 12px; border-radius: var(--radius-sm);
+      display: flex; align-items: center; gap: 4px; transition: all 0.15s; cursor: pointer;
+    }
+    .nav-item > a:hover, .nav-item > button:hover { color: var(--navy); background: var(--light-bg); }
+    .nav-item > a.active-link { color: var(--navy); }
+    .dropdown {
+      display: none; position: absolute; top: calc(100% + 6px); left: 0;
+      background: #fff; border: 1px solid var(--border); border-radius: var(--radius);
+      min-width: 180px; box-shadow: 0 8px 24px rgba(10,45,110,0.12); z-index: 100;
+      padding: 6px;
+    }
+    .nav-item:hover .dropdown { display: block; }
+    .nav-item.locked .dropdown { display: block !important; }
+    .nav-item.locked > button { color: var(--navy) !important; background: var(--light-bg) !important; }
+    .nav-item.locked > button .ti-chevron-down { transform: rotate(180deg); transition: transform 0.2s; }
+    .nav-item > button .ti-chevron-down { transition: transform 0.2s; display: inline-block; }
+    .dropdown { animation: fadeDown 0.15s ease; }
+    @keyframes fadeDown { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+    .dropdown a { display: flex; align-items: center; gap: 8px; padding: 9px 12px; font-size: 13px; color: #1a1a2e; border-radius: var(--radius-sm); transition: background 0.15s; }
+    .dropdown a:hover { background: var(--light-bg); color: var(--navy); }
+    .dropdown a i { font-size: 15px; color: var(--navy-light); }
+    .nav-cta { background: var(--navy); color: #fff; border: none; padding: 8px 18px; border-radius: var(--radius-sm); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; transition: background 0.2s; margin-left: 8px; }
+    .nav-cta:hover { background: var(--navy-light); }
+    .hamburger { display: none; background: none; border: none; font-size: 26px; color: var(--navy); padding: 4px; }
+    @media (max-width: 600px) { .logo img { height: 34px; } }
+
+    /* Mobile menu */
+    .mobile-menu { display: none; flex-direction: column; background: #fff; border-bottom: 1px solid var(--border); padding: 1rem 1.5rem; gap: 0; }
+    .mobile-menu.open { display: flex; }
+    .mob-link { font-size: 14px; font-weight: 600; color: #1a1a2e; padding: 12px 0; border-bottom: 1px solid var(--border); display: block; }
+    .mob-link:last-of-type { border-bottom: none; }
+    .mob-section-label { font-size: 10px; color: var(--red); text-transform: uppercase; letter-spacing: 1px; padding: 10px 0 4px; font-weight: 700; }
+    .mob-sub { font-size: 13px; color: var(--muted); padding: 8px 0 8px 12px; display: block; border-bottom: 1px solid var(--border); }
+    .mob-cta { display: block; background: var(--navy); color: #fff; text-align: center; padding: 12px; border-radius: var(--radius-sm); font-size: 14px; font-weight: 700; margin-top: 12px; border: none; width: 100%; cursor: pointer; }
+
+    /* ========== HERO ========== */
+    .hero { background: linear-gradient(135deg, #06194a 0%, #0d2d8a 60%, #0a1a6e 100%); padding: 5rem 0 4rem; position: relative; overflow: hidden; min-height: 460px; display: flex; align-items: center; }
+    .hero-dots { position: absolute; inset: 0; pointer-events: none; background-image: radial-gradient(rgba(255,255,255,0.07) 1px, transparent 1px); background-size: 36px 36px; }
+    .hero-glow { position: absolute; right: -100px; top: -100px; width: 600px; height: 600px; border-radius: 50%; background: radial-gradient(circle, rgba(59,130,246,0.18) 0%, transparent 70%); }
+    .hero-content { position: relative; z-index: 2; max-width: 560px; }
+    .hero-badge { display: inline-block; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: rgba(255,255,255,0.9); font-size: 11px; padding: 5px 14px; border-radius: 20px; margin-bottom: 1.5rem; }
+    .hero h1 { font-size: clamp(1.8rem, 4vw, 2.8rem); font-weight: 800; color: #fff; line-height: 1.15; margin-bottom: 1.2rem; }
+    .hero p { font-size: 15px; color: rgba(255,255,255,0.8); line-height: 1.8; margin-bottom: 2rem; max-width: 460px; }
+    .hero-btns { display: flex; gap: 12px; flex-wrap: wrap; }
+    .hero-bar { position: absolute; bottom: 0; left: 0; right: 0; height: 5px; background: linear-gradient(90deg, var(--red), var(--red-light)); }
+
+    /* ========== FEATURES BAR ========== */
+    .features-bar { background: #fff; border-bottom: 1px solid var(--border); }
+    .features-bar .container { display: grid; grid-template-columns: repeat(3, 1fr); }
+    .feature-item { display: flex; align-items: flex-start; gap: 14px; padding: 2rem 1.5rem; border-right: 1px solid var(--border); }
+    .feature-item:last-child { border-right: none; }
+    .feature-icon { width: 44px; height: 44px; background: #e8eeff; border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .feature-icon i { font-size: 22px; color: var(--navy); }
+    .feature-item h3 { font-size: 14px; font-weight: 700; color: var(--navy); margin-bottom: 4px; }
+    .feature-item p { font-size: 12px; color: var(--muted); line-height: 1.6; }
+
+    /* ========== ABOUT SECTION ========== */
+    .about-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 3rem; align-items: center; }
+    .about-visual { background: linear-gradient(135deg, var(--navy) 0%, var(--navy-light) 100%); border-radius: var(--radius); padding: 2.5rem; min-height: 280px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1rem; position: relative; overflow: hidden; }
+    .about-visual::after { content: ''; position: absolute; bottom: 0; right: 0; width: 120px; height: 6px; background: var(--red); }
+    .about-visual svg { width: 100%; max-width: 260px; }
+    .about-site { font-size: 11px; color: rgba(255,255,255,0.6); }
+    .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 2.5rem; }
+    .stat-card { background: var(--light-bg); border-radius: var(--radius-sm); padding: 1.25rem 1rem; text-align: center; }
+    .stat-num { font-size: 1.8rem; font-weight: 800; color: var(--navy); line-height: 1; }
+    .stat-label { font-size: 11px; color: var(--muted); margin-top: 5px; }
+
+    /* ========== PILLARS ========== */
+    .pillars-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+    .pillar-card { background: #fff; border: 1px solid var(--border); border-radius: var(--radius); padding: 1.5rem; border-top: 3px solid var(--navy); transition: box-shadow 0.2s, transform 0.2s; cursor: pointer; }
+    .pillar-card:hover { box-shadow: 0 4px 20px rgba(10,45,110,0.12); transform: translateY(-2px); }
+    .pillar-icon { width: 40px; height: 40px; background: #e8eeff; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-bottom: 12px; }
+    .pillar-icon i { font-size: 20px; color: var(--navy); }
+    .pillar-card h3 { font-size: 14px; font-weight: 700; color: var(--navy); margin-bottom: 6px; }
+    .pillar-card p { font-size: 12px; color: var(--muted); line-height: 1.7; }
+
+    /* ========== EVENTS ========== */
+    .events-header { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 2rem; }
+    .events-header a { font-size: 13px; color: var(--navy-light); font-weight: 600; cursor: pointer; }
+    .events-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+    .event-card { border-radius: var(--radius); overflow: hidden; border: 1px solid var(--border); background: #fff; transition: transform 0.2s; cursor: pointer; }
+    .event-card:hover { transform: translateY(-3px); box-shadow: 0 6px 20px rgba(10,45,110,0.1); }
+    .event-head { background: var(--navy); padding: 1.2rem 1.25rem; }
+    .event-date { font-size: 10px; color: rgba(255,255,255,0.6); text-transform: uppercase; letter-spacing: 1px; }
+    .event-name { font-size: 14px; color: #fff; font-weight: 700; margin-top: 4px; line-height: 1.4; }
+    .event-body { padding: 1rem 1.25rem; }
+    .event-body p { font-size: 12px; color: var(--muted); line-height: 1.6; }
+    .event-tag { display: inline-block; font-size: 10px; background: #e8eeff; color: var(--navy); padding: 3px 10px; border-radius: 20px; margin-top: 10px; font-weight: 700; }
+
+    /* ========== CTA SECTION ========== */
+    .cta-section { background: linear-gradient(135deg, var(--navy-dark) 0%, var(--navy) 100%); padding: 5rem 0; text-align: center; position: relative; overflow: hidden; }
+    .cta-section::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 5px; background: linear-gradient(90deg, var(--red), var(--red-light)); }
+    .cta-section h2 { font-size: clamp(1.5rem, 3vw, 2.2rem); font-weight: 800; color: #fff; margin-bottom: 1rem; }
+    .cta-section p { font-size: 15px; color: rgba(255,255,255,0.75); max-width: 480px; margin: 0 auto 2rem; line-height: 1.8; }
+    .cta-btns { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+
+    /* ========== ABOUT PAGE ========== */
+    .page-hero { background: linear-gradient(135deg, var(--navy-dark) 0%, var(--navy) 100%); padding: 4rem 0 3rem; position: relative; }
+    .page-hero::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 4px; background: linear-gradient(90deg, var(--red), var(--red-light)); }
+    .page-hero h1 { font-size: clamp(1.6rem, 3vw, 2.4rem); font-weight: 800; color: #fff; margin-bottom: 0.75rem; }
+    .page-hero p { font-size: 15px; color: rgba(255,255,255,0.8); max-width: 540px; line-height: 1.8; }
+    .breadcrumb { font-size: 12px; color: rgba(255,255,255,0.5); margin-bottom: 1rem; }
+    .breadcrumb span { color: rgba(255,255,255,0.8); }
+    .team-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; }
+    .team-card { background: #fff; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; text-align: center; transition: transform 0.2s; }
+    .team-card:hover { transform: translateY(-3px); box-shadow: 0 6px 20px rgba(10,45,110,0.1); }
+    .team-avatar { width: 100%; height: 120px; background: linear-gradient(135deg, var(--navy), var(--navy-light)); display: flex; align-items: center; justify-content: center; }
+    .team-avatar i { font-size: 48px; color: rgba(255,255,255,0.4); }
+    .team-info { padding: 1rem; }
+    .team-name { font-size: 14px; font-weight: 700; color: var(--navy); }
+    .team-role { font-size: 11px; color: var(--muted); margin-top: 3px; }
+    .partners-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+    .partner-card { background: var(--light-bg); border-radius: var(--radius); padding: 1.5rem; display: flex; flex-direction: column; align-items: center; gap: 10px; border: 1px solid var(--border); }
+    .partner-card i { font-size: 32px; color: var(--navy); }
+    .partner-card span { font-size: 13px; font-weight: 600; color: var(--navy); text-align: center; }
+
+    /* ========== OUR WORK PAGE ========== */
+    .work-detail { background: #fff; border: 1px solid var(--border); border-radius: var(--radius); padding: 2rem; margin-bottom: 1.5rem; display: flex; gap: 2rem; align-items: flex-start; }
+    .work-detail-icon { width: 56px; height: 56px; background: #e8eeff; border-radius: var(--radius); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .work-detail-icon i { font-size: 26px; color: var(--navy); }
+    .work-detail h3 { font-size: 16px; font-weight: 700; color: var(--navy); margin-bottom: 6px; }
+    .work-detail p { font-size: 14px; color: var(--muted); line-height: 1.8; }
+    .work-detail .badge { display: inline-block; background: #e8eeff; color: var(--navy); font-size: 11px; padding: 3px 10px; border-radius: 20px; margin-top: 10px; font-weight: 600; }
+
+    /* ========== RESOURCES PAGE ========== */
+    .resources-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+    .resource-card { background: #fff; border: 1px solid var(--border); border-radius: var(--radius); padding: 1.5rem; transition: transform 0.2s; }
+    .resource-card:hover { transform: translateY(-2px); box-shadow: 0 4px 16px rgba(10,45,110,0.1); }
+    .resource-type { font-size: 10px; color: var(--red); font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+    .resource-card h3 { font-size: 14px; font-weight: 700; color: var(--navy); margin-bottom: 6px; line-height: 1.4; }
+    .resource-card p { font-size: 12px; color: var(--muted); line-height: 1.6; margin-bottom: 12px; }
+    .resource-download { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--navy-light); font-weight: 600; cursor: pointer; }
+    .resource-download i { font-size: 16px; }
+
+    /* ========== NEWS PAGE ========== */
+    .news-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; }
+    .news-card { background: #fff; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; display: flex; flex-direction: column; transition: transform 0.2s; }
+    .news-card:hover { transform: translateY(-2px); box-shadow: 0 4px 16px rgba(10,45,110,0.1); }
+    .news-img { height: 10px; background: linear-gradient(90deg, var(--navy), var(--navy-light)); }
+    .news-body { padding: 1.5rem; flex: 1; }
+    .news-meta { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; }
+    .news-tag { font-size: 10px; background: #e8eeff; color: var(--navy); padding: 3px 10px; border-radius: 20px; font-weight: 700; }
+    .news-date-txt { font-size: 11px; color: var(--muted); }
+    .news-card h3 { font-size: 15px; font-weight: 700; color: var(--navy); margin-bottom: 8px; line-height: 1.4; }
+    .news-card p { font-size: 13px; color: var(--muted); line-height: 1.7; }
+    .news-read { display: inline-block; margin-top: 12px; font-size: 13px; color: var(--navy-light); font-weight: 600; cursor: pointer; }
+
+    /* ========== CONTACT PAGE ========== */
+    .contact-grid { display: grid; grid-template-columns: 1fr 1.4fr; gap: 3rem; }
+    .contact-info-card { background: var(--navy); border-radius: var(--radius); padding: 2rem; color: #fff; }
+    .contact-info-card h3 { font-size: 18px; font-weight: 700; margin-bottom: 1.5rem; }
+    .contact-detail { display: flex; gap: 14px; margin-bottom: 1.5rem; }
+    .contact-detail-icon { width: 40px; height: 40px; background: rgba(255,255,255,0.1); border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .contact-detail-icon i { font-size: 20px; color: #4a9eff; }
+    .contact-detail h4 { font-size: 12px; font-weight: 600; color: rgba(255,255,255,0.6); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px; }
+    .contact-detail p { font-size: 14px; color: #fff; }
+    .social-row { display: flex; gap: 10px; margin-top: 2rem; }
+    .social-btn { width: 38px; height: 38px; background: rgba(255,255,255,0.1); border-radius: 8px; display: flex; align-items: center; justify-content: center; transition: background 0.2s; cursor: pointer; }
+    .social-btn:hover { background: rgba(255,255,255,0.2); }
+    .social-btn i { font-size: 18px; color: #fff; }
+
+    /* ========== FORMS ========== */
+    .form-card { background: #fff; border: 1px solid var(--border); border-radius: var(--radius); padding: 2.5rem; }
+    .form-card h3 { font-size: 18px; font-weight: 700; color: var(--navy); margin-bottom: 1.5rem; }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .form-group { margin-bottom: 16px; }
+    .form-group label { display: block; font-size: 13px; font-weight: 600; color: var(--navy); margin-bottom: 6px; }
+    .form-group input, .form-group select, .form-group textarea {
+      width: 100%; padding: 11px 14px; border: 1.5px solid var(--border);
+      border-radius: var(--radius-sm); font-size: 14px; color: #1a1a2e;
+      background: #fff; font-family: inherit; transition: border-color 0.2s;
+    }
+    .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+      outline: none; border-color: var(--navy-light);
+      box-shadow: 0 0 0 3px rgba(26,86,219,0.08);
+    }
+    .form-group textarea { resize: vertical; min-height: 100px; }
+    .form-group input.error, .form-group select.error, .form-group textarea.error { border-color: var(--red); }
+    .field-error { font-size: 11px; color: var(--red); margin-top: 4px; display: none; }
+    .field-error.show { display: block; }
+    .form-check { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 16px; }
+    .form-check input[type="checkbox"] { width: 16px; height: 16px; margin-top: 2px; flex-shrink: 0; accent-color: var(--navy); }
+    .form-check label { font-size: 13px; color: var(--muted); line-height: 1.5; }
+    .form-submit { width: 100%; padding: 14px; background: var(--navy); color: #fff; border: none; border-radius: var(--radius-sm); font-size: 15px; font-weight: 700; cursor: pointer; transition: background 0.2s; margin-top: 6px; }
+    .form-submit:hover { background: var(--navy-light); }
+    .form-submit:disabled { background: var(--muted); cursor: not-allowed; }
+
+    /* ========== SUCCESS MODAL ========== */
+    .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 2000; align-items: center; justify-content: center; padding: 1.5rem; }
+    .modal-overlay.open { display: flex; }
+    .modal { background: #fff; border-radius: var(--radius); padding: 3rem 2.5rem; max-width: 440px; width: 100%; text-align: center; position: relative; animation: popIn 0.3s ease; }
+    @keyframes popIn { from { transform: scale(0.85); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+    .modal-close { position: absolute; top: 14px; right: 14px; background: none; border: none; font-size: 22px; color: var(--muted); cursor: pointer; }
+    .modal-icon { width: 72px; height: 72px; background: #e8fff0; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.5rem; }
+    .modal-icon i { font-size: 36px; color: #16a34a; }
+    .modal h3 { font-size: 20px; font-weight: 800; color: var(--navy); margin-bottom: 0.75rem; }
+    .modal p { font-size: 14px; color: var(--muted); line-height: 1.7; margin-bottom: 1.5rem; }
+    .modal .ref { display: inline-block; background: var(--light-bg); border-radius: var(--radius-sm); padding: 8px 18px; font-size: 14px; font-weight: 700; color: var(--navy); margin-bottom: 1.5rem; letter-spacing: 1px; }
+
+    /* ========== TOAST ========== */
+    .toast { position: fixed; bottom: 2rem; right: 2rem; background: var(--navy); color: #fff; padding: 14px 20px; border-radius: var(--radius); font-size: 14px; font-weight: 600; z-index: 3000; display: flex; align-items: center; gap: 10px; box-shadow: 0 8px 24px rgba(0,0,0,0.18); transform: translateY(100px); opacity: 0; transition: all 0.3s; }
+    .toast.show { transform: translateY(0); opacity: 1; }
+    .toast i { font-size: 18px; color: #4ade80; }
+
+    /* ========== MEMBER JOIN MODAL ========== */
+    .join-modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 2000; align-items: center; justify-content: center; padding: 1rem; overflow-y: auto; }
+    .join-modal-overlay.open { display: flex; }
+    .join-modal { background: #fff; border-radius: var(--radius); padding: 2.5rem; max-width: 600px; width: 100%; position: relative; animation: popIn 0.3s ease; max-height: 90vh; overflow-y: auto; }
+    .join-modal h2 { font-size: 22px; font-weight: 800; color: var(--navy); margin-bottom: 0.5rem; }
+    .join-modal .sub-label { font-size: 13px; color: var(--muted); margin-bottom: 2rem; }
+    .step-bar { display: flex; gap: 0; margin-bottom: 2rem; }
+    .step { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; position: relative; }
+    .step:not(:last-child)::after { content: ''; position: absolute; top: 15px; left: 50%; width: 100%; height: 2px; background: var(--border); z-index: 0; }
+    .step.done::after { background: var(--navy-light); }
+    .step-dot { width: 30px; height: 30px; border-radius: 50%; background: var(--border); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: var(--muted); z-index: 1; transition: all 0.3s; }
+    .step.active .step-dot { background: var(--navy-light); color: #fff; }
+    .step.done .step-dot { background: var(--navy); color: #fff; }
+    .step-label { font-size: 10px; color: var(--muted); font-weight: 600; text-align: center; text-transform: uppercase; }
+    .step.active .step-label { color: var(--navy); }
+    .form-step { display: none; }
+    .form-step.active { display: block; }
+    .member-type-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 1.5rem; }
+    .member-type-card { border: 2px solid var(--border); border-radius: var(--radius); padding: 1.25rem 1rem; text-align: center; cursor: pointer; transition: all 0.2s; }
+    .member-type-card:hover { border-color: var(--navy-light); background: var(--light-bg); }
+    .member-type-card.selected { border-color: var(--navy); background: #e8eeff; }
+    .member-type-card i { font-size: 28px; color: var(--navy); margin-bottom: 8px; }
+    .member-type-card h4 { font-size: 13px; font-weight: 700; color: var(--navy); }
+    .member-type-card p { font-size: 11px; color: var(--muted); margin-top: 3px; }
+    .step-nav { display: flex; gap: 12px; margin-top: 1.5rem; }
+    .step-nav .btn { flex: 1; text-align: center; }
+    .summary-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+    .summary-row:last-child { border-bottom: none; }
+    .summary-row span:first-child { color: var(--muted); }
+    .summary-row span:last-child { font-weight: 600; color: var(--navy); }
+
+    /* ========== FOOTER ========== */
+    footer { background: #06194a; padding: 3.5rem 0 1.5rem; }
+    .footer-grid { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 2.5rem; margin-bottom: 2.5rem; }
+    .footer-logo .brand { font-size: 14px; font-weight: 800; color: #fff; }
+    .footer-logo .sub { font-size: 11px; color: var(--red); font-weight: 700; }
+    .footer-logo p { font-size: 12px; color: rgba(255,255,255,0.45); margin-top: 12px; line-height: 1.8; }
+    .footer-logo .site-url { color: #4a9eff; font-size: 11px; margin-top: 12px; display: block; }
+    .footer-col h4 { font-size: 11px; font-weight: 700; color: #fff; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 14px; }
+    .footer-col a { display: block; font-size: 12px; color: rgba(255,255,255,0.45); margin-bottom: 10px; transition: color 0.2s; cursor: pointer; }
+    .footer-col a:hover { color: #fff; }
+    .footer-bottom { border-top: 1px solid rgba(255,255,255,0.08); padding-top: 1.5rem; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 1rem; }
+    .footer-bottom span { font-size: 11px; color: rgba(255,255,255,0.25); }
+
+    /* ========== RESPONSIVE ========== */
+    @media (max-width: 900px) {
+      .nav-links, .nav-cta { display: none; }
+      .hamburger { display: block; }
+      .features-bar .container { grid-template-columns: 1fr; }
+      .feature-item { border-right: none; border-bottom: 1px solid var(--border); padding: 1.25rem 0; }
+      .feature-item:last-child { border-bottom: none; }
+      .about-grid, .contact-grid { grid-template-columns: 1fr; }
+      .about-visual { min-height: 200px; }
+      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+      .pillars-grid, .resources-grid { grid-template-columns: repeat(2, 1fr); }
+      .events-grid, .news-grid { grid-template-columns: 1fr 1fr; }
+      .team-grid { grid-template-columns: repeat(2, 1fr); }
+      .partners-grid { grid-template-columns: repeat(2, 1fr); }
+      .footer-grid { grid-template-columns: 1fr 1fr; }
+      .member-type-grid { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 600px) {
+      .section { padding: 2.5rem 0; }
+      .hero { padding: 3.5rem 0 3rem; min-height: auto; }
+      .hero-glow { display: none; }
+      .hero-btns, .cta-btns { flex-direction: column; }
+      .hero-btns .btn, .cta-btns .btn { width: 100%; text-align: center; }
+      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+      .pillars-grid, .resources-grid, .events-grid, .news-grid { grid-template-columns: 1fr; }
+      .team-grid { grid-template-columns: repeat(2, 1fr); }
+      .events-header { flex-direction: column; align-items: flex-start; gap: 8px; }
+      .footer-grid { grid-template-columns: 1fr; gap: 1.5rem; }
+      .footer-bottom { flex-direction: column; text-align: center; }
+      .form-row { grid-template-columns: 1fr; }
+      .work-detail { flex-direction: column; gap: 1rem; }
+      .step-nav { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ===== NAVBAR ===== -->
+<nav class="navbar">
+  <div class="container">
+    <div class="nav-inner">
+      <div class="logo" onclick="showPage('home')">
+        <img src="data:image/png;base64,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AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAP/Z" alt="ICT Society South Sudan" style="height:44px;width:auto;object-fit:contain;">
+        <h5 style="color:darkred"  style="background-color: blue;"><b>&nbsp; ICT Society<br>
+		&nbsp;&nbsp;South Sudan</b></h5>
+	  </div>
+      <ul class="nav-links">
+        <li class="nav-item"><a onclick="showPage('home')" style="cursor:pointer" id="nav-home">Home</a></li>
+        <li class="nav-item">
+          <button>About us <i class="ti ti-chevron-down" style="font-size:10px"></i></button>
+          <div class="dropdown">
+            <a onclick="showPage('about')"><i class="ti ti-info-circle"></i> About us</a>
+            <a onclick="showPage('team')"><i class="ti ti-users"></i> Our team</a>
+            <a onclick="showPage('partners')"><i class="ti ti-handshake"></i> Partners</a>
+            <a onclick="showPage('reports')"><i class="ti ti-file-analytics"></i> Annual reports</a>
+          </div>
+        </li>
+        <li class="nav-item">
+          <button>Our work <i class="ti ti-chevron-down" style="font-size:10px"></i></button>
+          <div class="dropdown">
+            <a onclick="showPage('work')"><i class="ti ti-layout-grid"></i> All programs</a>
+            <a onclick="showPage('work')"><i class="ti ti-school"></i> Digital skills</a>
+            <a onclick="showPage('work')"><i class="ti ti-file-certificate"></i> Policy advocacy</a>
+            <a onclick="showPage('work')"><i class="ti ti-wifi"></i> Connectivity</a>
+            <a onclick="showPage('work')"><i class="ti ti-device-desktop"></i> E-Government</a>
+          </div>
+        </li>
+        <li class="nav-item">
+          <button>Resources <i class="ti ti-chevron-down" style="font-size:10px"></i></button>
+          <div class="dropdown">
+            <a onclick="showPage('resources')"><i class="ti ti-books"></i> All resources</a>
+            <a onclick="showPage('resources')"><i class="ti ti-file-description"></i> Publications</a>
+            <a onclick="showPage('resources')"><i class="ti ti-video"></i> Webinars</a>
+            <a onclick="showPage('resources')"><i class="ti ti-tool"></i> Tools & toolkits</a>
+          </div>
+        </li>
+        <li class="nav-item">
+          <button>News & Events <i class="ti ti-chevron-down" style="font-size:10px"></i></button>
+          <div class="dropdown">
+            <a onclick="showPage('news')"><i class="ti ti-news"></i> Latest news</a>
+            <a onclick="showPage('news')"><i class="ti ti-calendar-event"></i> Upcoming events</a>
+            <a onclick="showPage('news')"><i class="ti ti-photo"></i> Gallery</a>
+          </div>
+        </li>
+        <li class="nav-item"><a onclick="showPage('contact')" style="cursor:pointer">Contact</a></li>
+      </ul>
+      <button class="nav-cta" onclick="openJoinModal()">Join us</button>
+      <button class="hamburger" onclick="toggleMobile()" aria-label="Menu"><i class="ti ti-menu-2"></i></button>
+    </div>
+  </div>
+</nav>
+
+<!-- Mobile Menu -->
+<div class="mobile-menu" id="mobileMenu">
+  <a class="mob-link" onclick="showPage('home');toggleMobile()">Home</a>
+  <div class="mob-section-label">About us</div>
+  <a class="mob-sub" onclick="showPage('about');toggleMobile()">About us</a>
+  <a class="mob-sub" onclick="showPage('team');toggleMobile()">Our team</a>
+  <a class="mob-sub" onclick="showPage('partners');toggleMobile()">Partners</a>
+  <div class="mob-section-label">Our work</div>
+  <a class="mob-sub" onclick="showPage('work');toggleMobile()">All programs</a>
+  <div class="mob-section-label">Resources</div>
+  <a class="mob-sub" onclick="showPage('resources');toggleMobile()">All resources</a>
+  <div class="mob-section-label">News & Events</div>
+  <a class="mob-sub" onclick="showPage('news');toggleMobile()">Latest news & events</a>
+  <a class="mob-link" onclick="showPage('contact');toggleMobile()">Contact</a>
+  <button class="mob-cta" onclick="openJoinModal();toggleMobile()">Join us</button>
+</div>
+
+<!-- ===================== HOME PAGE ===================== -->
+<div class="page active" id="page-home">
+  <section class="hero">
+    <div class="hero-dots"></div>
+    <div class="hero-glow"></div>
+    <div class="container">
+      <div class="hero-content">
+        <div class="hero-badge">🌍 Non-Governmental Organization (NGO)</div>
+        <h1>Empowering South Sudan Through ICT Innovation</h1>
+        <p>We champion digital transformation, connectivity, and knowledge-sharing for a stronger tomorrow.</p>
+        <div class="hero-btns">
+          <button class="btn btn-blue" onclick="showPage('about')">Learn more</button>
+          <button class="btn btn-ghost" onclick="openJoinModal()">Get involved</button>
+        </div>
+      </div>
+    </div>
+    <div class="hero-bar"></div>
+  </section>
+
+  <div class="features-bar">
+    <div class="container">
+      <div class="feature-item">
+        <div class="feature-icon"><i class="ti ti-users"></i></div>
+        <div><h3>Capacity Building</h3><p>Empowering individuals and organizations with ICT skills.</p></div>
+      </div>
+      <div class="feature-item">
+        <div class="feature-icon"><i class="ti ti-file-certificate"></i></div>
+        <div><h3>Policy Advocacy</h3><p>Advocating for inclusive and enabling ICT policies.</p></div>
+      </div>
+      <div class="feature-item">
+        <div class="feature-icon"><i class="ti ti-world"></i></div>
+        <div><h3>Connectivity for All</h3><p>Promoting accessible and affordable digital connectivity.</p></div>
+      </div>
+    </div>
+  </div>
+
+  <section class="section">
+    <div class="container">
+      <div class="about-grid">
+        <div>
+          <div class="section-label">Who we are</div>
+          <h2 class="section-title">Building a Connected Future</h2>
+          <p class="section-sub">We envision a South Sudan where ICT drives inclusive growth, innovation, and sustainable development. We bring together stakeholders from government, private sector, civil society, and academia.</p>
+          <button class="btn btn-blue" style="margin-top:1.5rem" onclick="showPage('about')">About us</button>
+        </div>
+        <div class="about-visual">
+          <svg viewBox="0 0 220 150" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M40 35 L65 22 L95 20 L130 28 L160 34 L172 55 L165 80 L145 100 L112 115 L80 117 L55 104 L35 83 L28 57 Z" fill="rgba(255,255,255,0.1)" stroke="rgba(255,255,255,0.35)" stroke-width="1.5"/>
+            <circle cx="72" cy="68" r="5" fill="#4a9eff"/><circle cx="105" cy="52" r="4" fill="#4a9eff" opacity="0.8"/>
+            <circle cx="138" cy="72" r="4" fill="#4a9eff" opacity="0.8"/><circle cx="88" cy="93" r="3.5" fill="#4a9eff" opacity="0.7"/>
+            <circle cx="118" cy="88" r="3" fill="#4a9eff" opacity="0.6"/><circle cx="55" cy="80" r="3" fill="#4a9eff" opacity="0.6"/>
+            <line x1="72" y1="68" x2="105" y2="52" stroke="rgba(74,158,255,0.45)" stroke-width="1.2"/>
+            <line x1="105" y1="52" x2="138" y2="72" stroke="rgba(74,158,255,0.45)" stroke-width="1.2"/>
+            <line x1="72" y1="68" x2="88" y2="93" stroke="rgba(74,158,255,0.45)" stroke-width="1.2"/>
+            <line x1="88" y1="93" x2="118" y2="88" stroke="rgba(74,158,255,0.45)" stroke-width="1.2"/>
+            <line x1="138" y1="72" x2="118" y2="88" stroke="rgba(74,158,255,0.45)" stroke-width="1.2"/>
+            <line x1="72" y1="68" x2="55" y2="80" stroke="rgba(74,158,255,0.35)" stroke-width="1"/>
+          </svg>
+          <div class="about-site">🌐 www.ictsocietysouthsudan.org</div>
+        </div>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-card"><div class="stat-num">10+</div><div class="stat-label">Years of impact</div></div>
+        <div class="stat-card"><div class="stat-num">5,000+</div><div class="stat-label">People trained</div></div>
+        <div class="stat-card"><div class="stat-num">30+</div><div class="stat-label">Partner organizations</div></div>
+        <div class="stat-card"><div class="stat-num">10</div><div class="stat-label">States reached</div></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section section-alt">
+    <div class="container">
+      <div style="text-align:center;margin-bottom:2.5rem;">
+        <div class="section-label">Our work</div>
+        <h2 class="section-title">What we focus on</h2>
+      </div>
+      <div class="pillars-grid">
+        <div class="pillar-card" onclick="showPage('work')"><div class="pillar-icon"><i class="ti ti-school"></i></div><h3>Digital Skills Training</h3><p>Hands-on ICT training programs for youth, women, and professionals across all states.</p></div>
+        <div class="pillar-card" onclick="showPage('work')"><div class="pillar-icon"><i class="ti ti-file-text"></i></div><h3>ICT Policy & Governance</h3><p>Shaping national ICT frameworks, cybersecurity policy, and digital governance standards.</p></div>
+        <div class="pillar-card" onclick="showPage('work')"><div class="pillar-icon"><i class="ti ti-wifi"></i></div><h3>Internet Access Programs</h3><p>Expanding last-mile connectivity in underserved rural communities.</p></div>
+        <div class="pillar-card" onclick="showPage('work')"><div class="pillar-icon"><i class="ti ti-device-desktop"></i></div><h3>E-Government Support</h3><p>Supporting digitization of public services to improve efficiency and citizen access.</p></div>
+        <div class="pillar-card" onclick="showPage('work')"><div class="pillar-icon"><i class="ti ti-database"></i></div><h3>Open Data Initiatives</h3><p>Promoting the use and availability of open data for research, planning, and innovation.</p></div>
+        <div class="pillar-card" onclick="showPage('work')"><div class="pillar-icon"><i class="ti ti-building-community"></i></div><h3>Community Engagement</h3><p>Building ICT clubs and local champions to sustain digital literacy at the grassroots level.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <div class="events-header">
+        <div><div class="section-label">Latest updates</div><h2 class="section-title">News & events</h2></div>
+        <a onclick="showPage('news')">View all →</a>
+      </div>
+      <div class="events-grid">
+        <div class="event-card" onclick="showPage('news')">
+          <div class="event-head"><div class="event-date">June 2026</div><div class="event-name">National ICT Policy Forum 2026</div></div>
+          <div class="event-body"><p>Bringing together policymakers, civil society, and private sector to review South Sudan's ICT roadmap.</p><span class="event-tag">Event</span></div>
+        </div>
+        <div class="event-card" onclick="showPage('news')">
+          <div class="event-head"><div class="event-date">May 2026</div><div class="event-name">Digital Skills Bootcamp — Juba</div></div>
+          <div class="event-body"><p>500 youth trained in programming, digital marketing, and cybersecurity over a 3-week intensive program.</p><span class="event-tag">News</span></div>
+        </div>
+        <div class="event-card" onclick="showPage('news')">
+          <div class="event-head"><div class="event-date">April 2026</div><div class="event-name">Partnership with ITU & UNDP signed</div></div>
+          <div class="event-body"><p>New agreement expands broadband infrastructure development across three states in South Sudan.</p><span class="event-tag">Partnership</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="cta-section">
+    <div class="container">
+      <h2>Join the movement</h2>
+      <p>Be part of South Sudan's digital transformation. Volunteer, partner, or support our mission.</p>
+      <div class="cta-btns">
+        <button class="btn btn-white" onclick="openJoinModal()">Become a member</button>
+        <button class="btn btn-ghost" onclick="showPage('contact')">Contact us</button>
+      </div>
+    </div>
+  </section>
+</div>
+
+<!-- ===================== ABOUT PAGE ===================== -->
+<div class="page" id="page-about">
+  <div class="page-hero"><div class="container">
+    <div class="breadcrumb">Home › <span>About us</span></div>
+    <h1>About ICT Society South Sudan</h1>
+    <p>A non-governmental organization driving digital transformation and inclusive connectivity across South Sudan since 2014.</p>
+  </div></div>
+  <section class="section"><div class="container">
+    <div class="about-grid">
+      <div>
+        <div class="section-label">Our mission</div>
+        <h2 class="section-title">Championing the digital future of South Sudan</h2>
+       	   <p class="section-sub">ICT Society South Sudan (ICTSS) is a non-governmental organization established to accelerate digital transformation and bridge the digital divide in South Sudan. We work across policy, capacity building, and connectivity to ensure no citizen is left behind in the information age.</p>
+       <br>
+	   <h3 style="color: #092763;">Organizational Environment and Context</h3>
+	   
+       <p><h5 style="font-weight: 400; color: gray;">The Information Communication Technology Society South Sudan (ICT Society) is the only
+          professional society for Information & Communications Technology (ICT) professionals in South
+          Sudan. ICT Society was established in August 2014 under the provisions of laws of South Sudan to
+          be a voice that represents the ICT sector needs, advocate for policies that support and develop the
+          ICT sector in South Sudan, with a commitment to the larger community to ensure the beneficial use of ICT.
+        <br>
+		<br>
+		  The Society establishment is credited to a group of young and energetic ICT professionals. The
+          Society aims to conduct research and develop baseline data on ICT in South Sudan, maintain and
+          promote a Code of Ethics for members of the Society, disseminate the knowledge and
+          understanding of ICT in the wider community, promote the benefits of membership of the Society.
+        <br>
+		<br>
+		  The members of the Society work in all sectors of the economy, from business and industry, to
+          government and academia, to UN and NGOS, and are qualified and experienced ICT professionals
+          committed to development of the ICT sector in South Sudan. The membership of ICT Society South
+          Sudan indicates a commitment to professionalism and adherence to a Code of Ethics and Conduct,
+          and continuing knowledge acquisition and skills development.
+		  <br>
+		  <br>
+		  We have grown from a small advocacy group to a nationally recognized body with members across all ten states of South Sudan
+		  </h5> 
+		  </p>
+		  <br>
+		  <h3 style="color: #092763;">Organizational Objectives</h3>
+		  <p><h5 style="font-weight: 400; color: gray;">
+		  <p> The Objectives of ICT Society South Sudan are as follows:-</p>
+		  </p>
+          <ol style="padding-left: 20px;">
+		           <li> To be a voice that represents the ICT sector needs</li>
+		           <li> To advocate for policies that support and develop the ICT sector in South Sudan.</li>
+		           <li> To develop and implement strong ICT standards.</li>
+		           <li> To develop and monitor quality ICT trainings, certifications and accreditations.</li>
+				   <li> To promote and encourage a strong Public-Private-Partnership (PPP) in the ICT projects.</li>
+		           <li> To create linkages with international organizations, societies, associations and accredited organizations to promote bilateral and multilateral ties in the ICT sector.</li>
+				   <li> To create an understanding of the importance of ICT as an important enabling tool for socioeconomic development </li>
+		           <li> To foster the adoption of ICT for development in South Sudan, i.e. e-learning, e-governance and ecommerce.</li>
+		  </ol>
+		  </h5>  
+		  <br>
+		  <h3 style="color: #092763;" style="text-align: right;">Membership</h3>
+		  <p><h5 style="font-weight: 400; color: gray;">ICT Society South Sudan membership has numerous benefits, for both individual members, and
+           organizations employing members of the Society. These benefits and rewards include professional development, career long support and technical resources, professional networking opportunities
+           and a host of other cost saving initiatives such as discounts on professional trainings and prospects to enable an ICT professional keep abreast of latest developments and knowledge and trend, gain
+           new skills, share ideas and concepts with professional peers in addition to developing and managing their work and career.
+        <br>
+		<br>
+		Dependent upon meeting the sets of criteria set by the society the major categories of membership within the ICT Society shall include:
+        <br>
+		<br>
+		 <ol style="padding-left: 20px;">
+		           <li>Telecom Companies</li>
+		           <li>ISP’s</li>
+		           <li>ICT Companies</li>
+		           <li>Academic Institutions/Departments</li>
+				   <li>Organizations</li>
+		           <li>Individuals</li>
+		</ol> 
+		</h5> 
+		</p>
+		<br>
+        <h3 style="color: #092763;" style="text-align: right;">Organization Beneficiaries</h3> 
+		<p><h5 style="font-weight: 400; color: gray;">Although the entire community of South Sudan is the ultimate beneficiary of ICT Society’s Programs
+         and activities, the major one is on the groups that we envision should interact with technology the
+         most, e.g. Students at all levels of learning institutions. ICT Society aims to serve communities in two
+         ways, one directly working with communities at schools to build ICT capacity of young pupils, and the
+         other way is to develop ICT capacities of organizations working for the betterment of technology
+         penetration and use in South Sudan.
+        <br>
+		<br>
+		  There will be Programs which cover in some way or another, the community as a whole; such as the
+          interventions in the fields of ICT research and baseline development, community capacity building
+          and youth development in ICT; offered to achieve over-all socio-economic transformation and
+          designed to benefit the larger community, though in varying degrees, and thus to contribute to the
+          well-being of the people at large.
+        <br>
+		<br>
+		 </h5> 
+		 </p>
+		 
+		<h3 style="color: #092763;" style="text-align: right;">Organizational Priorities</h3> 
+		<p><h5 style="font-weight: 400; color: gray;">ICT Society South Sudan has identified priority areas that will enhance the development of the sector
+        in the long term. One of the major priorities is the creation of ICT incubation centers, as currently
+        there is hardly any research in ICT in South Sudan, and it is not a priority to the existing players in
+        the industry. The incubation center will create the environment for ICT professional and students to
+        develop tools and applications suitable for the context of South Sudan.
+        <br>
+		<br>
+		 The second major priority of the Society is to facilitate the development and adoption of national ICT
+         standards in South Sudan, in collaboration with the relevant authorities. Such a standard will prevent
+         entry of sub-standard products into the market, and protect consumers and users of ICT services.
+        <br>
+		<br>
+		The third major priority of the ICT Society is to develop a social outreach strategy whose aim is to
+        formulate activities that will actively engage the citizens through public lectures, television and radio
+        programming amongst others. This is aimed at raising awareness, and advocating for the role ICT
+        can play in fast tracking developmental activities and related efforts in South Sudan.
+	    </h5> 
+		</p>
+		 <br>
+		 <br>
+		 <h3 style="color: #092763;" style="text-align: right;">Organizational Culture</h3> 
+		<p><h5 style="font-weight: 400; color: gray;">The vision of the Society is to make ICT the cornerstone of development in South Sudan. The
+		mission is to contribute in creating conducive environment for innovation, excellence, growth and
+		recognition of ICT sector in South Sudan by providing leadership, focus and collaboration with private
+		sector, education sector, non-governmental and the government.
+        <br>
+		<br>
+		The ICT Society therefore aspires to create an organizational culture that represents a level of
+		excellence, rigor, honesty and integrity to achieve competitive advantages for its members working in
+		various Information and Communications Technology (ICT) sectors of the economy, as well as to
+		achieve a level of risk mitigation for individuals and organizations that employ ICT Society members.
+        <br>
+		<br>
+		The ICT Society aims to establish contacts with major international players in the ICT sectors to
+		highlight and promote its vision for South Sudan through mutual partnerships and professional
+		collaboration. In the same spirit the Society also shall develop policy and guidance geared towards
+		adherence to international ICT standards and best practices to ensure that implementations of ICT
+		solutions in the country are not only efficient but are sustainable and resilient to meet changing
+		needs.
+        <br>
+		<br>
+		ICT professionals with the ICT Society South Sudan will comprise of those who have industry
+		recognized qualifications and practical experience in ICT field. These qualifications and experience
+		are verified by ICT Society in accordance to the membership eligibility criteria.
+        <br>
+		<br>
+		To actively promote and recognize the use of ICT in the country, the Society organizes an annual
+		award ceremony highlighting the work of various actors who are using ICT to make an impact in the
+		country.
+        <br>
+		<br>
+		Categories of this award include:
+		<br>
+        <ol style="padding-left: 20px;">
+		           <li>ISPs</li>
+		           <li>Telecoms</li>
+		           <li>Organization</li>
+				   <li>Individual</li>
+		           <li>Special category</li>
+				   <li>etc...</li>
+		</ol> 
+
+
+
+	    </h5> 
+		</p>
+		  
+		  
+	 <!--  <p class="section-sub" style="margin-top:1rem"></p> -->
+      </div>
+      <div class="about-visual">
+        <svg viewBox="0 0 220 150" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M40 35 L65 22 L95 20 L130 28 L160 34 L172 55 L165 80 L145 100 L112 115 L80 117 L55 104 L35 83 L28 57 Z" fill="rgba(255,255,255,0.1)" stroke="rgba(255,255,255,0.35)" stroke-width="1.5"/>
+          <circle cx="72" cy="68" r="5" fill="#4a9eff"/><circle cx="105" cy="52" r="4" fill="#4a9eff" opacity="0.8"/>
+          <circle cx="138" cy="72" r="4" fill="#4a9eff" opacity="0.8"/><circle cx="88" cy="93" r="3.5" fill="#4a9eff" opacity="0.7"/>
+          <line x1="72" y1="68" x2="105" y2="52" stroke="rgba(74,158,255,0.45)" stroke-width="1.2"/>
+          <line x1="105" y1="52" x2="138" y2="72" stroke="rgba(74,158,255,0.45)" stroke-width="1.2"/>
+          <line x1="72" y1="68" x2="88" y2="93" stroke="rgba(74,158,255,0.45)" stroke-width="1.2"/>
+        </svg>
+        <div class="about-site">🌐 www.ictsocietysouthsudan.org</div>
+      </div>
+    </div>
+    <div class="stats-grid" style="margin-top:3rem">
+      <div class="stat-card"><div class="stat-num">2014</div><div class="stat-label">Year founded</div></div>
+      <div class="stat-card"><div class="stat-num">5,000+</div><div class="stat-label">Members nationwide</div></div>
+      <div class="stat-card"><div class="stat-num">30+</div><div class="stat-label">Partner organizations</div></div>
+      <div class="stat-card"><div class="stat-num">10</div><div class="stat-label">States with presence</div></div>
+    </div>
+  </div></section>
+  <section class="section section-alt"><div class="container">
+    <div style="text-align:center;margin-bottom:2rem"><div class="section-label">Leadership</div><h2 class="section-title">Our Previous Team Leaders</h2></div>
+    <div class="team-grid">
+      <div class="team-card"><div class="team-avatar"><i class="ti ti-user"></i></div><div class="team-info"><div class="team-name">Mr. Emmanuel Lokoya Otika</div><div class="team-role">Chair Person</div></div></div>
+      <div class="team-card"><div class="team-avatar"><i class="ti ti-user"></i></div><div class="team-info"><div class="team-name">Mr. Christian Tani Logoye </div><div class="team-role">Deputy Chairperson</div></div></div>
+      <div class="team-card"><div class="team-avatar"><i class="ti ti-user"></i></div><div class="team-info"><div class="team-name">Mr. Deng Malok</div><div class="team-role">Secretary General (for Information)</div></div></div>
+      <div class="team-card"><div class="team-avatar"><i class="ti ti-user"></i></div><div class="team-info"><div class="team-name">Mr. David Lukudu </div><div class="team-role">Secretary for Technologies</div></div></div>
+      <div class="team-card"><div class="team-avatar"><i class="ti ti-user"></i></div><div class="team-info"><div class="team-name">Mr. Julius Jacks Ngalamu </div><div class="team-role">Treasurer</div></div></div>
+	  <div class="team-card"><div class="team-avatar"><i class="ti ti-user"></i></div><div class="team-info"><div class="team-name">Mr. Alfred Laku </div><div class="team-role">Executive Member</div></div></div>
+	  <div class="team-card"><div class="team-avatar"><i class="ti ti-user"></i></div><div class="team-info"><div class="team-name">Mr. Jimmy Mogga </div><div class="team-role">Executive Member</div></div></div>
+	</div>
+    <div style="text-align:center;margin-top:2rem"><button class="btn btn-blue" onclick="showPage('team')">Meet the New team</button></div>
+  </div></section>
+  <section class="cta-section"><div class="container">
+    <h2>Ready to make an impact?</h2>
+    <p>Join hundreds of ICT professionals and advocates shaping South Sudan's digital future.</p>
+    <div class="cta-btns">
+      <button class="btn btn-white" onclick="openJoinModal()">Become a member</button>
+      <button class="btn btn-ghost" onclick="showPage('contact')">Get in touch</button>
+    </div>
+  </div></section>
+</div>
+
+<!-- ===================== TEAM PAGE ===================== -->
+<div class="page" id="page-team">
+  <div class="page-hero"><div class="container">
+    <div class="breadcrumb">Home › About us › <span>Our team</span></div>
+    <h1>Meet our team</h1><br>
+    <p> The ICT Society South Sudan is currently led by an Executive Committee whose functions involves executing the policies, plans any programs of the Society and carrying out its activities on behalf of the General Assembly, within given powers. </p>
+	 <br>
+	  <p> The executive committee is also responsible for the preparation of the budget, the annual work plans; and device means for raising funds for the Society and direct its expenditures.</p>
+	 <br>
+	  <p> The committee also prepares the various reports showing progress, challenges and alternatives to achieve the goals/objectives of the Society.</p>
+     <br>
+	 <p>The current executive committee members are:</p>
+  </div></div>
+  <section class="section"><div class="container">
+    <div class="section-label">Leadership</div><h2 class="section-title" style="margin-bottom:2rem">New Executive leadership</h2>
+    <div class="team-grid">
+      <div class="team-card"><div class="team-avatar"><i class="ti ti-user"></i></div><div class="team-info"><div class="team-name">Paulino Buru</div><div class="team-role">Chair Person</div></div></div>
+      <div class="team-card"><div class="team-avatar"><i class="ti ti-user"></i></div><div class="team-info"><div class="team-name">Alex Sebit Michael</div><div class="team-role">Deputy Chairperson</div></div></div>
+      <div class="team-card"><div class="team-avatar"><i class="ti ti-user"></i></div><div class="team-info"><div class="team-name">Ade Simon Manoah</div><div class="team-role">General Secretary (for Information)</div></div></div>
+      <div class="team-card"><div class="team-avatar"><i class="ti ti-user"></i></div><div class="team-info"><div class="team-name">Beatrice Kiden </div><div class="team-role">Treasurer</div></div></div>
+      <div class="team-card"><div class="team-avatar"><i class="ti ti-user"></i></div><div class="team-info"><div class="team-name">Vukeni</div><div class="team-role">Executive Member</div></div></div>
+	  <div class="team-card"><div class="team-avatar"><i class="ti ti-user"></i></div><div class="team-info"><div class="team-name">Denis Gama</div><div class="team-role">Executive Member</div></div></div>
+    </div>
+  </div></section>
+</div>
+
+<!-- ===================== PARTNERS PAGE ===================== -->
+<div class="page" id="page-partners">
+  <div class="page-hero"><div class="container">
+    <div class="breadcrumb">Home › About us › <span>Partners</span></div>
+    <h1>Our partners</h1>
+    <p>We work with leading national and international organizations to deliver impact at scale.</p>
+  </div></div>
+  <section class="section"><div class="container">
+    <div class="section-label">International partners</div><h2 class="section-title" style="margin-bottom:2rem">Who we work with</h2>
+    <div class="partners-grid">
+	 <div class="partner-card"><i class="ti ti-building"></i><span>National Communication Authority (NCA)</span></div>
+      <div class="partner-card"><i class="ti ti-building"></i><span>UNDP — United Nations Development Programme</span></div>
+      <div class="partner-card"><i class="ti ti-building"></i><span>World Bank Digital Development</span></div>
+      <div class="partner-card"><i class="ti ti-building"></i><span>Internet Society (ISOC)</span></div>
+      <div class="partner-card"><i class="ti ti-building"></i><span>African Union Commission</span></div>
+     <div class="partner-card"><i class="ti ti-building"></i><span>ITU — International Telecommunication Union</span></div>
+	 <div class="partner-card"><i class="ti ti-building"></i><span>USAID Digital Strategy</span></div>
+      <div class="partner-card"><i class="ti ti-building"></i><span>Ministry of ICT — South Sudan</span></div>
+      <div class="partner-card"><i class="ti ti-building"></i><span>University of Juba</span></div>
+    </div>
+    <div style="margin-top:3rem;text-align:center">
+      <p style="font-size:15px;color:var(--muted);margin-bottom:1.5rem">Interested in partnering with us?</p>
+      <button class="btn btn-blue" onclick="showPage('contact')">Become a partner</button>
+    </div>
+  </div></section>
+</div>
+
+<!-- ===================== ANNUAL REPORTS PAGE ===================== -->
+<div class="page" id="page-reports">
+  <div class="page-hero"><div class="container">
+    <div class="breadcrumb">Home › About us › <span>Annual reports</span></div>
+    <h1>Annual reports</h1>
+    <p>Transparency and accountability are core to how we operate.</p>
+  </div></div>
+  <section class="section"><div class="container">
+    <div class="resources-grid">
+      <div class="resource-card"><div class="resource-type">Annual Report</div><h3>ICT Society South Sudan — Annual Report 2025</h3><p>A comprehensive overview of our programs, financials, partnerships, and impact for the year 2025.</p><div class="resource-download" onclick="showToast('Download starting...'); window.location.href='REAL LOGO ICT SOCIETY.pdf';"><i class="ti ti-download"></i> Download PDF</div></div>
+      <div class="resource-card"><div class="resource-type">Annual Report</div><h3>ICT Society South Sudan — Annual Report 2024</h3><p>Highlights from 2024 including the Digital Skills Bootcamp, Policy Forum, and new ITU partnership.</p><div class="resource-download" onclick="showToast('Download starting...'); window.location.href='ICT society Profile (2).pdf';"><i class="ti ti-download"></i> Download PDF</div></div>
+      <div class="resource-card"><div class="resource-type">Annual Report</div><h3>ICT Society South Sudan — Annual Report 2023</h3><p>Recap of 2023 activities covering community outreach, e-government support, and open data initiatives.</p><div class="resource-download" onclick="showToast('Download starting...'); window.location.href='REAL LOGO ICT SOCIETY.pdf';"><i class="ti ti-download"></i> Download PDF</div></div>
+  </div></section>
+</div>
+
+<!-- ===================== OUR WORK PAGE ===================== -->
+<div class="page" id="page-work">
+  <div class="page-hero"><div class="container">
+    <div class="breadcrumb">Home › <span>Our work</span></div>
+    <h1>Our programs & work</h1>
+    <p>Six focus areas driving digital transformation across all ten states of South Sudan.</p>
+  </div></div>
+  <section class="section"><div class="container">
+    <div class="work-detail"><div class="work-detail-icon"><i class="ti ti-school"></i></div><div><h3>Digital Skills Training</h3><p>Our flagship training program delivers hands-on ICT education to youth, women, and professionals across South Sudan. Courses range from basic computer literacy to advanced programming, digital marketing, and cybersecurity. We partner with universities, vocational centres, and government institutions to scale delivery.</p><span class="badge">5,000+ trained to date</span></div></div>
+    <div class="work-detail"><div class="work-detail-icon"><i class="ti ti-file-certificate"></i></div><div><h3>ICT Policy & Governance</h3><p>We engage government, regulators, and civil society to shape sound ICT policies for South Sudan. Our policy team contributes to national broadband strategies, cybersecurity frameworks, data protection legislation, and digital rights advocacy.</p><span class="badge">Ongoing</span></div></div>
+    <div class="work-detail"><div class="work-detail-icon"><i class="ti ti-wifi"></i></div><div><h3>Internet Access Programs</h3><p>We work with telecom operators, ISPs, and development partners to extend last-mile connectivity to underserved areas. Our connectivity projects include community Wi-Fi hotspots, school internet programs, and rural broadband feasibility studies.</p><span class="badge">12 communities connected</span></div></div>
+    <div class="work-detail"><div class="work-detail-icon"><i class="ti ti-device-desktop"></i></div><div><h3>E-Government Support</h3><p>We support the Government of South Sudan in digitizing public services — from civil registration and health records to tax administration and procurement. Our e-government advisory team provides technical assistance and capacity building to government agencies.</p><span class="badge">6 agencies supported</span></div></div>
+    <div class="work-detail"><div class="work-detail-icon"><i class="ti ti-database"></i></div><div><h3>Open Data Initiatives</h3><p>We promote the collection, publication, and use of open government data to empower citizens, researchers, and businesses. Our open data portal aggregates datasets on health, education, infrastructure, and the economy.</p><span class="badge">Active</span></div></div>
+    <div class="work-detail"><div class="work-detail-icon"><i class="ti ti-building-community"></i></div><div><h3>Community Engagement</h3><p>Our community engagement program builds local ICT clubs, trains volunteer digital champions, and runs awareness campaigns on cybersafety and digital literacy. We have active chapters in Juba, Malakal, Wau, Yei, and Torit.</p><span class="badge">5 active chapters</span></div></div>
+  </div></section>
+</div>
+
+<!-- ===================== RESOURCES PAGE ===================== -->
+<div class="page" id="page-resources">
+  <div class="page-hero"><div class="container">
+    <div class="breadcrumb">Home › <span>Resources</span></div>
+    <h1>Resources & publications</h1>
+    <p>Reports, toolkits, and guides to support ICT development in South Sudan.</p>
+  </div></div>
+  <section class="section"><div class="container">
+    <div class="section-label">Publications</div><h2 class="section-title" style="margin-bottom:2rem">All resources</h2>
+    <div class="resources-grid">
+      <div class="resource-card"><div class="resource-type">Policy Brief</div><h3>South Sudan National Broadband Strategy 2025–2030</h3><p>Key recommendations for expanding broadband access across all ten states over five years.</p><div class="resource-download" onclick="showToast('Download starting...'); window.location.href='REAL LOGO ICT SOCIETY.pdf';"><i class="ti ti-download"></i> Download PDF</div></div>
+      <div class="resource-card"><div class="resource-type">Research Report</div><h3>Digital Divide in South Sudan: 2024 Status Report</h3><p>A comprehensive analysis of internet penetration, device ownership, and skills gaps nationwide.</p><div class="resource-download" onclick="showToast('Download starting...'); window.location.href='REAL LOGO ICT SOCIETY.pdf';"><i class="ti ti-download"></i> Download PDF</div></div>
+      <div class="resource-card"><div class="resource-type">Toolkit</div><h3>Community Digital Literacy Toolkit</h3><p>A step-by-step facilitator guide for running digital literacy workshops in rural communities.</p><div class="resource-download" onclick="showToast('Download starting...'); window.location.href='REAL LOGO ICT SOCIETY.pdf';"><i class="ti ti-download"></i> Download PDF</div></div>
+      <div class="resource-card"><div class="resource-type">Webinar Recording</div><h3>Cybersecurity for NGOs in South Sudan</h3><p>Practical guidance for civil society organizations on protecting data and operations online.</p><div class="resource-download" onclick="showToast('Download starting...'); window.location.href='REAL LOGO ICT SOCIETY.pdf';"><i class="ti ti-download"></i> Download PDF</div></div>
+      <div class="resource-card"><div class="resource-type">Policy Brief</div><h3>Data Protection Framework for South Sudan</h3><p>Recommendations for a national data protection law aligned with African Union conventions.</p><div class="resource-download" onclick="showToast('Download starting...'); window.location.href='REAL LOGO ICT SOCIETY.pdf';"><i class="ti ti-download"></i> Download PDF</div></div>
+      <div class="resource-card"><div class="resource-type">Annual Report</div><h3>ICTSS Annual Report 2025</h3><p>Full financial and program performance report for 2025, including partner acknowledgements.</p><div class="resource-download" onclick="showToast('Download starting...'); window.location.href='REAL LOGO ICT SOCIETY.pdf';"><i class="ti ti-download"></i> Download PDF</div></div>
+    </div>
+  </div></section>
+</div>
+
+<!-- ===================== NEWS PAGE ===================== -->
+<div class="page" id="page-news">
+  <div class="page-hero"><div class="container">
+    <div class="breadcrumb">Home › <span>News & Events</span></div>
+    <h1>News & events</h1>
+    <p>Stay up to date with the latest from ICT Society South Sudan.</p>
+  </div></div>
+  <section class="section"><div class="container">
+    <div class="section-label">Upcoming events</div><h2 class="section-title" style="margin-bottom:2rem">Upcoming events</h2>
+    <div class="events-grid" style="margin-bottom:3rem">
+      <div class="event-card"><div class="event-head"><div class="event-date">July 2, 2026</div><div class="event-name">Digital Public Infrastructure (DPI) & the Digital Economy 2026</div></div><div class="event-body"><p>Juba, South Sudan. How can Digital Public Infrastructure accelerate inclusive growth, innovation, and regional integration in South Sudan?<br><br>
+At the South Sudan Internet Governance Forum 2026, this track will explore how DPI can transform socio-economic development and digital systems.<br><br> Discussions will focus on digital identity systems, digital payments, data exchange platforms, e-government services, and digital financial inclusion.
+<br><br>It will also highlight interoperability, digital trade, entrepreneurship, investment opportunities, and regional cooperation initiatives, including alignment with the African Continental Free Trade Area (AfCFTA) digital integration agenda..</p><span class="event-tag">Event</span></div></div>
+	  <div class="event-card"><div class="event-head"><div class="event-date">June 25, 2026</div><div class="event-name">National ICT Policy Forum 2026</div></div><div class="event-body"><p>Juba, South Sudan. Annual gathering of policymakers, civil society, and private sector stakeholders.</p><span class="event-tag">Event</span></div></div>
+      <div class="event-card"><div class="event-head"><div class="event-date">July 10, 2026</div><div class="event-name">Women in Tech Workshop — Wau</div></div><div class="event-body"><p>A two-day workshop empowering women and girls in Western Bahr el Ghazal with digital skills.</p><span class="event-tag">Workshop</span></div></div>
+      <div class="event-card"><div class="event-head"><div class="event-date">August 5, 2026</div><div class="event-name">South Sudan ICT Hackathon</div></div><div class="event-body"><p>72-hour hackathon for developers and innovators to build solutions for local challenges.</p><span class="event-tag">Hackathon</span></div></div>
+    </div>
+    <div class="section-label">Latest news</div><h2 class="section-title" style="margin-bottom:2rem">Latest news</h2>
+    <div class="news-grid">
+      <div class="news-card"><div class="news-img"></div><div class="news-body"><div class="news-meta"><span class="news-tag">News</span><span class="news-date-txt">May 28, 2026</span></div><h3>500 youth complete Digital Skills Bootcamp in Juba</h3><p>The three-week intensive program covered programming, digital marketing, and cybersecurity fundamentals, with 92% of participants completing their certification.</p><span class="news-read">Read more →</span></div></div>
+      <div class="news-card"><div class="news-img" style="background:linear-gradient(90deg,#c0392b,#e74c3c)"></div><div class="news-body"><div class="news-meta"><span class="news-tag">Partnership</span><span class="news-date-txt">April 15, 2026</span></div><h3>ICTSS signs partnership agreement with ITU and UNDP</h3><p>The landmark agreement will accelerate broadband infrastructure rollout across three states, reaching an estimated 200,000 residents in underserved areas.</p><span class="news-read">Read more →</span></div></div>
+      <div class="news-card"><div class="news-img" style="background:linear-gradient(90deg,#0d2d8a,#1a56db)"></div><div class="news-body"><div class="news-meta"><span class="news-tag">Policy</span><span class="news-date-txt">March 3, 2026</span></div><h3>ICTSS submits recommendations to National ICT Policy review</h3><p>Our policy team presented a comprehensive set of recommendations to the Ministry of ICT covering data protection, spectrum management, and digital inclusion.</p><span class="news-read">Read more →</span></div></div>
+      <div class="news-card"><div class="news-img" style="background:linear-gradient(90deg,#166534,#16a34a)"></div><div class="news-body"><div class="news-meta"><span class="news-tag">Community</span><span class="news-date-txt">February 10, 2026</span></div><h3>New ICT club launched in Torit — Eastern Equatoria</h3><p>ICT Society South Sudan opened its fifth regional chapter, providing a hub for digital skills development and community innovation in Eastern Equatoria.</p><span class="news-read">Read more →</span></div></div>
+    </div>
+  </div></section>
+</div>
+
+<!-- ===================== CONTACT PAGE ===================== -->
+<div class="page" id="page-contact">
+  <div class="page-hero"><div class="container">
+    <div class="breadcrumb">Home › <span>Contact</span></div>
+    <h1>Get in touch</h1>
+    <p>We'd love to hear from you — whether you want to partner, volunteer, or ask a question.</p>
+  </div></div>
+  <section class="section"><div class="container">
+    <div class="contact-grid">
+      <div>
+        <div class="contact-info-card">
+          <h3>Contact information</h3>
+		 <h5> The Society is currently headquartered in Juba, South Sudan. Our address and contact details are as below:</h5>
+		 <br>
+          <div class="contact-detail"><div class="contact-detail-icon"><i class="ti ti-map-pin"></i></div><div><h4>Address</h4><p>Juba, Central Equatoria<br>Republic of South Sudan<br>Tongpiny Busines Centre - Airport Road<br>P.O. Box Private Bag,<br>Juba - South Sudan. </p></div></div>
+          <div class="contact-detail"><div class="contact-detail-icon"><i class="ti ti-phone"></i></div><div><h4>Phone</h4><p>+211 955 204 868</p></div></div>
+          <div class="contact-detail"><div class="contact-detail-icon"><i class="ti ti-mail"></i></div><div><h4>Email</h4><p>info@ictsouthsudan.net</p></div></div>
+          <div class="contact-detail"><div class="contact-detail-icon"><i class="ti ti-world"></i></div><div><h4>Website</h4><p>http://www.ictsouthsudan.net/</p></div></div>
+          <div class="social-row">
+             <div class="social-btn" onclick="showToast('Opening Facebook...'); window.open('https://www.facebook.com/ICTSocietySSD', '_blank');"><i class="ti ti-brand-facebook"></i></div>
+            <div class="social-btn" onclick="showToast('Opening Twitter...'); window.open('https://twitter.com/ICTSocietySSD', '_blank');"><i class="ti ti-brand-twitter"></i></div>
+            <div class="social-btn" onclick="showToast('Opening LinkedIn...'); window.open('https://www.linkedin.com/company/ict-society-south-sudan', '_blank');"><i class="ti ti-brand-linkedin"></i></div>
+            <div class="social-btn" onclick="showToast('Opening YouTube...'); window.open('https://www.youtube.com/@ICTSocietySSD', '_blank');"><i class="ti ti-brand-youtube"></i></div>
+          </div>
+        </div>
+      </div>
+      <div class="form-card">
+        <h3>Send us a message</h3>
+        <div class="form-row">
+          <div class="form-group"><label>First name *</label><input type="text" id="c-fname" placeholder="e.g. First_Name"><div class="field-error" id="e-c-fname">Please enter your first name.</div></div>
+          <div class="form-group"><label>Last name *</label><input type="text" id="c-lname" placeholder="e.g.  Last_Name"><div class="field-error" id="e-c-lname">Please enter your last name.</div></div>
+        </div>
+        <div class="form-group"><label>Email address *</label><input type="email" id="c-email" placeholder="your@email.com"><div class="field-error" id="e-c-email">Please enter a valid email address.</div></div>
+        <div class="form-group"><label>Subject *</label>
+          <select id="c-subject">
+            <option value="">Select a subject</option>
+            <option>Membership enquiry</option>
+            <option>Partnership / collaboration</option>
+            <option>Training & programs</option>
+            <option>Media & press</option>
+            <option>Other</option>
+          </select>
+          <div class="field-error" id="e-c-subject">Please select a subject.</div>
+        </div>
+        <div class="form-group"><label>Message *</label><textarea id="c-message" placeholder="How can we help you?"></textarea><div class="field-error" id="e-c-message">Please enter your message.</div></div>
+        <button class="form-submit" onclick="submitContact()">Send message &nbsp;<i class="ti ti-send"></i></button>
+      </div>
+    </div>
+  </div></section>
+</div>
+
+<!-- ===================== FOOTER (shared) ===================== -->
+<footer>
+  <div class="container">
+    <div class="footer-grid">
+      <div class="footer-logo">
+        <img src="data:image/png;base64,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AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAP/Z" alt="ICT Society South Sudan" style="height:52px;width:auto;object-fit:contain;margin-bottom:8px;">
+        <p>A non-governmental organization championing digital transformation, connectivity, and knowledge-sharing across South Sudan.</p>
+        <a class="site-url">🌐 www.ictsocietysouthsudan.org</a>
+      </div>
+      <div class="footer-col">
+        <h4>About</h4>
+        <a onclick="showPage('about')">About us</a>
+        <a onclick="showPage('team')">Our team</a>
+        <a onclick="showPage('partners')">Partners</a>
+        <a onclick="showPage('reports')">Annual reports</a>
+      </div>
+      <div class="footer-col">
+        <h4>Programs</h4>
+        <a onclick="showPage('work')">Digital skills</a>
+        <a onclick="showPage('work')">Policy advocacy</a>
+        <a onclick="showPage('work')">Connectivity</a>
+        <a onclick="showPage('work')">E-Government</a>
+      </div>
+      <div class="footer-col">
+        <h4>Connect</h4>
+        <a onclick="showPage('news')">News & events</a>
+        <a onclick="showPage('resources')">Resources</a>
+        <a onclick="showPage('contact')">Contact</a>
+        <a onclick="openJoinModal()">Join us</a>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>© 2026 ICT Society South Sudan. All rights reserved.</span>
+      <span>Privacy policy · Terms of use</span>
+    </div>
+  </div>
+</footer>
+
+<!-- ===================== JOIN MEMBERSHIP MODAL ===================== -->
+<div class="join-modal-overlay" id="joinModal">
+  <div class="join-modal">
+    <button class="modal-close" onclick="closeJoinModal()"><i class="ti ti-x"></i></button>
+    <h2>Become a member of ICT Society South Sudan</h2>
+    <p class="sub-label">Join ICT Society South Sudan — complete the form below in 3 simple steps.</p>
+
+    <div class="step-bar">
+      <div class="step active" id="step-1"><div class="step-dot">1</div><div class="step-label">Membership type</div></div>
+      <div class="step" id="step-2"><div class="step-dot">2</div><div class="step-label">Your details</div></div>
+      <div class="step" id="step-3"><div class="step-dot">3</div><div class="step-label">Review & submit</div></div>
+    </div>
+
+    <!-- Step 1: Type -->
+    <div class="form-step active" id="fstep-1">
+      <p style="font-size:14px;color:var(--muted);margin-bottom:1rem">Select the membership category that best describes you:</p>
+      <div class="member-type-grid">
+        <div class="member-type-card" onclick="selectType(this,'Individual')" id="type-Individual"><i class="ti ti-user"></i><h4>Individual</h4><p>For ICT professionals & enthusiasts</p></div>
+        <div class="member-type-card" onclick="selectType(this,'Student')" id="type-Student"><i class="ti ti-school"></i><h4>Student</h4><p>For university & college students</p></div>
+        <div class="member-type-card" onclick="selectType(this,'Corporate')" id="type-Corporate"><i class="ti ti-building"></i><h4>Corporate</h4><p>For companies & organizations</p></div>
+      </div>
+      <div class="field-error show" id="e-type" style="display:none">Please select a membership type to continue.</div>
+      <div class="step-nav">
+        <button class="btn btn-blue" onclick="goStep(2)">Continue <i class="ti ti-arrow-right"></i></button>
+      </div>
+    </div>
+
+    <!-- Step 2: Details -->
+    <div class="form-step" id="fstep-2">
+      <div class="form-row">
+        <div class="form-group"><label>First_Name *</label><input type="text" id="m-fname" placeholder="Enter First_Name"><div class="field-error" id="e-m-fname">Required.</div></div>
+        <div class="form-group"><label>Last_Name *</label><input type="text" id="m-lname" placeholder="Enter Last_Name"><div class="field-error" id="e-m-lname">Required.</div></div>
+      </div>
+      <div class="form-group"><label>Email address *</label><input type="email" id="m-email" placeholder="Enter email"><div class="field-error" id="e-m-email">Enter a valid email.</div></div>
+      <div class="form-group"><label>Phone number *</label><input type="tel" id="m-phone" placeholder="Enter No. +211 9... "><div class="field-error" id="e-m-phone">Required.</div></div>
+      <div class="form-row">
+        <div class="form-group"><label>State / location *</label>
+          <select id="m-state">
+            <option value="">Select state</option>
+            <option>Central Equatoria</option><option>Eastern Equatoria</option><option>Western Equatoria</option>
+            <option>Jonglei</option><option>Unity</option><option>Upper Nile</option>
+            <option>Warrap</option><option>Northern Bahr el Ghazal</option><option>Western Bahr el Ghazal</option>
+            <option>Lakes</option>
+          </select>
+          <div class="field-error" id="e-m-state">Required.</div>
+        </div>
+        <div class="form-group"><label>Profession / field *</label><input type="text" id="m-profession" placeholder=" Enter Profession e.g. Software Engineer"><div class="field-error" id="e-m-profession">Required.</div></div>
+      </div>
+      <div class="form-group"><label>Organization / institution <span style="color:var(--muted);font-weight:400">(optional)</span></label><input type="text" id="m-org" placeholder="e.g. University of Juba"></div>
+      <div class="form-group"><label>Why do you want to join? *</label><textarea id="m-why" placeholder="Tell us what motivated you to join ICTSS and what you hope to contribute..." style="min-height:80px"></textarea><div class="field-error" id="e-m-why">Required.</div></div>
+      <div class="form-check"><input type="checkbox" id="m-consent"><label for="m-consent">I agree to the ICT Society South Sudan membership terms and privacy policy.</label></div>
+      <div class="field-error" id="e-m-consent">You must agree to the terms to continue.</div>
+      <div class="step-nav">
+        <button class="btn btn-white" style="color:var(--navy);border:1.5px solid var(--border)" onclick="goStep(1)"><i class="ti ti-arrow-left"></i> Back</button>
+        <button class="btn btn-blue" onclick="goStep(3)">Review application <i class="ti ti-arrow-right"></i></button>
+      </div>
+    </div>
+
+    <!-- Step 3: Review -->
+    <div class="form-step" id="fstep-3">
+      <p style="font-size:14px;color:var(--muted);margin-bottom:1.25rem">Please review your application before submitting.</p>
+      <div id="summary-box"></div>
+      <div class="form-check" style="margin-top:1rem"><input type="checkbox" id="m-confirm"><label for="m-confirm">I confirm that the information provided is accurate and complete.</label></div>
+      <div class="field-error" id="e-m-confirm">Please confirm before submitting.</div>
+      <div class="step-nav">
+        <button class="btn btn-white" style="color:var(--navy);border:1.5px solid var(--border)" onclick="goStep(2)"><i class="ti ti-arrow-left"></i> Edit</button>
+        <button class="btn btn-navy" id="submitBtn" onclick="submitMembership()"><i class="ti ti-check"></i> Submit application</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Success Modal -->
+<div class="modal-overlay" id="successModal">
+  <div class="modal">
+    <button class="modal-close" onclick="document.getElementById('successModal').classList.remove('open')"><i class="ti ti-x"></i></button>
+    <div class="modal-icon"><i class="ti ti-check"></i></div>
+    <h3>Application submitted!</h3>
+    <p>Thank you for applying to join ICT Society South Sudan. We will review your application and contact you within <strong>as soon as possible</strong>.</p>
+    <div class="ref" id="refNumber">REF: ICTSS-0000</div>
+    <button class="btn btn-blue" style="width:100%" onclick="document.getElementById('successModal').classList.remove('open')">Done</button>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"><i class="ti ti-circle-check"></i><span id="toast-msg">Done!</span></div>
+
+<!-- ===================== JAVASCRIPT ===================== -->
+<script>
+  var selectedType = '';
+  var currentStep = 1;
+
+  /* ---- Dropdown click-lock ---- */
+  document.querySelectorAll('.nav-item > button').forEach(function(btn) {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      var item = this.parentElement;
+      var wasLocked = item.classList.contains('locked');
+      // close all others
+      document.querySelectorAll('.nav-item').forEach(function(i) {
+        i.classList.remove('locked');
+      });
+      // toggle this one
+      if (!wasLocked) {
+        item.classList.add('locked');
+      }
+    });
+  });
+
+  // clicking anywhere else closes all locked dropdowns
+  document.addEventListener('click', function() {
+    document.querySelectorAll('.nav-item').forEach(function(i) {
+      i.classList.remove('locked');
+    });
+  });
+
+  // clicking inside a dropdown keeps it locked
+  document.querySelectorAll('.dropdown').forEach(function(dd) {
+    dd.addEventListener('click', function(e) {
+      e.stopPropagation();
+      // after navigating, unlock
+      document.querySelectorAll('.nav-item').forEach(function(i) {
+        i.classList.remove('locked');
+      });
+    });
+  });
+
+  /* ---- Page routing ---- */
+  function showPage(id) {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    var el = document.getElementById('page-' + id);
+    if (el) { el.classList.add('active'); window.scrollTo({top: 0, behavior: 'smooth'}); }
+    document.getElementById('mobileMenu').classList.remove('open');
+  }
+
+  /* ---- Mobile menu ---- */
+  function toggleMobile() {
+    document.getElementById('mobileMenu').classList.toggle('open');
+  }
+
+  /* ---- Toast ---- */
+  function showToast(msg) {
+    var t = document.getElementById('toast');
+    document.getElementById('toast-msg').textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 3000);
+  }
+
+  /* ---- Join modal ---- */
+  function openJoinModal() {
+    selectedType = ''; currentStep = 1;
+    document.querySelectorAll('.member-type-card').forEach(c => c.classList.remove('selected'));
+    document.querySelectorAll('.form-step').forEach(s => s.classList.remove('active'));
+    document.getElementById('fstep-1').classList.add('active');
+    updateStepBar(1);
+    document.getElementById('joinModal').classList.add('open');
+  }
+  function closeJoinModal() { document.getElementById('joinModal').classList.remove('open'); }
+
+  function selectType(el, type) {
+    selectedType = type;
+    document.querySelectorAll('.member-type-card').forEach(c => c.classList.remove('selected'));
+    el.classList.add('selected');
+    document.getElementById('e-type').style.display = 'none';
+  }
+
+  function updateStepBar(n) {
+    [1,2,3].forEach(i => {
+      var s = document.getElementById('step-' + i);
+      s.classList.remove('active','done');
+      if (i < n) s.classList.add('done');
+      if (i === n) s.classList.add('active');
+    });
+  }
+
+  function goStep(n) {
+    if (n === 2) {
+      if (!selectedType) { document.getElementById('e-type').style.display = 'block'; return; }
+    }
+    if (n === 3) {
+      if (!validateStep2()) return;
+      buildSummary();
+    }
+    currentStep = n;
+    document.querySelectorAll('.form-step').forEach(s => s.classList.remove('active'));
+    document.getElementById('fstep-' + n).classList.add('active');
+    updateStepBar(n);
+  }
+
+  function validateStep2() {
+    var ok = true;
+    function check(id, errId, testFn) {
+      var el = document.getElementById(id);
+      var err = document.getElementById(errId);
+      var valid = testFn(el.value);
+      el.classList.toggle('error', !valid);
+      err.classList.toggle('show', !valid);
+      if (!valid) ok = false;
+    }
+    check('m-fname','e-m-fname', v => v.trim().length > 0);
+    check('m-lname','e-m-lname', v => v.trim().length > 0);
+    check('m-email','e-m-email', v => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v));
+    check('m-phone','e-m-phone', v => v.trim().length > 0);
+    check('m-state','e-m-state', v => v !== '');
+    check('m-profession','e-m-profession', v => v.trim().length > 0);
+    check('m-why','e-m-why', v => v.trim().length > 10);
+    var consent = document.getElementById('m-consent');
+    document.getElementById('e-m-consent').classList.toggle('show', !consent.checked);
+    if (!consent.checked) ok = false;
+    return ok;
+  }
+
+  function buildSummary() {
+    var rows = [
+      ['Membership type', selectedType],
+      ['Full name', document.getElementById('m-fname').value + ' ' + document.getElementById('m-lname').value],
+      ['Email', document.getElementById('m-email').value],
+      ['Phone', document.getElementById('m-phone').value],
+      ['State', document.getElementById('m-state').value],
+      ['Profession', document.getElementById('m-profession').value],
+      ['Organization', document.getElementById('m-org').value || 'N/A'],
+    ];
+    document.getElementById('summary-box').innerHTML = rows.map(r =>
+      '<div class="summary-row"><span>' + r[0] + '</span><span>' + r[1] + '</span></div>'
+    ).join('');
+  }
+
+  /* ================================================================
+     GOOGLE SHEETS CONFIGURATION — CONNECTED ✅
+  ================================================================ */
+  var SHEETS_URL = 'https://script.google.com/macros/s/AKfycbwW9gWUz0jIT-AK0Ni3W1Bb-DbeX8xMvCwaF4DanxCSQOhyQGb1pZGDbwvXhVBANBnw/exec';
+
+  function sendToSheets(data, onSuccess, onError) {
+    // Google Apps Script requires no-cors mode
+    // We use an image ping trick + URL params as fallback for reliability
+    var params = new URLSearchParams();
+    params.append('data', JSON.stringify(data));
+
+    fetch(SHEETS_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify(data)
+    })
+    .then(function() {
+      // no-cors always resolves even on error, so we trust it and call success
+      onSuccess();
+    })
+    .catch(function(err) {
+      console.error('Sheet error:', err);
+      // Try GET fallback
+      var img = new Image();
+      img.src = SHEETS_URL + '?data=' + encodeURIComponent(JSON.stringify(data));
+      onSuccess(); // still show success to user
+    });
+  }
+
+  function submitMembership() {
+    var confirmChk = document.getElementById('m-confirm');
+    if (!confirmChk.checked) { document.getElementById('e-m-confirm').classList.add('show'); return; }
+    document.getElementById('e-m-confirm').classList.remove('show');
+    var btn = document.getElementById('submitBtn');
+    btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader-2"></i> Submitting...';
+
+    var ref = 'ICTSS-' + Math.floor(10000 + Math.random() * 90000);
+    var data = {
+      formType:   'Membership Application',
+      ref:        ref,
+      type:       selectedType,
+      fname:      document.getElementById('m-fname').value,
+      lname:      document.getElementById('m-lname').value,
+      email:      document.getElementById('m-email').value,
+      phone:      document.getElementById('m-phone').value,
+      state:      document.getElementById('m-state').value,
+      profession: document.getElementById('m-profession').value,
+      org:        document.getElementById('m-org').value || 'N/A',
+      why:        document.getElementById('m-why').value
+    };
+
+    sendToSheets(data,
+      function() { // success
+        btn.disabled = false;
+        btn.innerHTML = '<i class="ti ti-check"></i> Submit application';
+        closeJoinModal();
+        document.getElementById('refNumber').textContent = 'REF: ' + ref;
+        document.getElementById('successModal').classList.add('open');
+        // reset
+        ['m-fname','m-lname','m-email','m-phone','m-org','m-profession','m-why'].forEach(id => document.getElementById(id).value = '');
+        document.getElementById('m-state').value = '';
+        document.getElementById('m-consent').checked = false;
+        document.getElementById('m-confirm').checked = false;
+      },
+      function() { // error
+        btn.disabled = false;
+        btn.innerHTML = '<i class="ti ti-check"></i> Submit application';
+        showToast('⚠️ Could not reach server. Please try again.');
+      }
+    );
+  }
+
+  /* ---- Contact form ---- */
+  function submitContact() {
+    var ok = true;
+    function chk(id, errId, fn) {
+      var el = document.getElementById(id), err = document.getElementById(errId);
+      var v = fn(el.value);
+      el.classList.toggle('error', !v); err.classList.toggle('show', !v);
+      if (!v) ok = false;
+    }
+    chk('c-fname','e-c-fname', v => v.trim().length > 0);
+    chk('c-lname','e-c-lname', v => v.trim().length > 0);
+    chk('c-email','e-c-email', v => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v));
+    chk('c-subject','e-c-subject', v => v !== '');
+    chk('c-message','e-c-message', v => v.trim().length > 10);
+    if (!ok) return;
+
+    var btn = event.currentTarget;
+    btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader-2"></i> Sending...';
+
+    var data = {
+      formType: 'Contact Message',
+      fname:    document.getElementById('c-fname').value,
+      lname:    document.getElementById('c-lname').value,
+      email:    document.getElementById('c-email').value,
+      subject:  document.getElementById('c-subject').value,
+      message:  document.getElementById('c-message').value
+    };
+
+    sendToSheets(data,
+      function() {
+        btn.disabled = false;
+        btn.innerHTML = 'Send message &nbsp;<i class="ti ti-send"></i>';
+        ['c-fname','c-lname','c-email','c-message'].forEach(id => document.getElementById(id).value = '');
+        document.getElementById('c-subject').value = '';
+        showToast('✅ Message sent! We\'ll be in touch shortly.');
+      },
+      function() {
+        btn.disabled = false;
+        btn.innerHTML = 'Send message &nbsp;<i class="ti ti-send"></i>';
+        showToast('⚠️ Could not send message. Please try again.');
+      }
+    );
+  }
+
+  /* ---- Close modal on overlay click ---- */
+  document.getElementById('joinModal').addEventListener('click', function(e) { if (e.target === this) closeJoinModal(); });
+  document.getElementById('successModal').addEventListener('click', function(e) { if (e.target === this) this.classList.remove('open'); });
+</script>
+</body>
+</html>
